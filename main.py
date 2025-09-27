@@ -27,7 +27,16 @@ CHANNELS = {
     "Nitro": 1418965921116065852,
     "Membres Online": 1418969590251130953,
     "Membres Offline": 1418969590251130953,
-    "Boost": 1418996481032978643
+    "Boost": 1418996481032978643,
+    "Message Réaction": 1419054351108018391
+}
+
+CHANNEL_KEYWORDS = {
+    "Nitro": ["Nitro Basic", "Nitro Boost"],
+    "Membres Online": ["Online"],
+    "Membres Offline": ["Offline"],
+    "Boost": ["Boost"],
+    "Message Réaction": ["Message Réaction"]
 }
 
 # Stocke les messages de vitrine {product_id: message_id}
@@ -158,6 +167,13 @@ def build_vitrine_embed(product, stock, price):
     )
     return embed
 
+def get_channel_for_product(product_name, channel_objects):
+    for key, keywords in CHANNEL_KEYWORDS.items():
+        if any(kw in product_name for kw in keywords):
+            return channel_objects[key]
+    # fallback
+    return channel_objects.get("Boost")
+
 async def update_vitrine(client):
     await client.wait_until_ready()
     channel_objects = {k: client.get_channel(v) for k, v in CHANNELS.items()}
@@ -170,16 +186,7 @@ async def update_vitrine(client):
             price = get_product_price(p)
 
             embed = build_vitrine_embed(p, stock, price)
-
-            # Logique de routing vers salon
-            if "Nitro" in p["name"]:
-                channel = channel_objects["Nitro"]
-            elif "Online" in p["name"]:
-                channel = channel_objects["Membres Online"]
-            elif "Offline" in p["name"]:
-                channel = channel_objects["Membres Offline"]
-            else:
-                channel = channel_objects["Boost"]
+            channel = get_channel_for_product(p["name"], channel_objects)
 
             if pid in message_map:
                 try:
