@@ -2,12 +2,15 @@ import os
 import requests
 import time
 import threading
+import asyncio
+import discord
 from flask import Flask
 
 # === CONFIG ===
 SHOP_ID = os.environ.get("SHOP_ID", "181618")
 AUTH_TOKEN = os.environ.get("AUTH_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 CHECK_INTERVAL = 5  # secondes
 
 # URL API SellAuth
@@ -16,10 +19,21 @@ API_URL = f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products"
 # Dictionnaire pour stocker l'état précédent
 last_stock = {}
 
-# Photo fixe pour tous les embeds
+# Photo fixe pour restock (embeds annonces)
 DEFAULT_IMAGE_URL = "https://imagedelivery.net/HL_Fwm__tlvUGLZF2p74xw/ce50fff9-ba1b-4e48-514b-4734633d6f00/public"
 
-# === BOT ===
+# === CONFIG SALONS POUR VITRINE ===
+CHANNELS = {
+    "Nitro": 1418965921116065852,
+    "Membres Online": 1418969590251130953,
+    "Membres Offline": 1418969590251130953,
+    "Boost": 1418996481032978643
+}
+
+# Stocke les messages de vitrine {product_id: message_id}
+message_map = {}
+
+# === BOT RESTOCK (Webhook) ===
 
 def get_products():
     headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -64,6 +78,8 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
         title = f"❌ Rupture de stock | {product_name}"
         description = f"Le produit **{product_name}** est maintenant en rupture ! 🛑"
         color = 0xff0000
+    else:
+        return
 
     fields = [
         {"name": "📦 Stock actuel", "value": str(stock), "inline": True},
@@ -83,7 +99,7 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
     }
 
     payload = {
-        "content": "@everyone",  # <-- Mention @everyone ici
+        "content": "@everyone",
         "embeds": [embed]
     }
 
@@ -122,6 +138,62 @@ def bot_loop():
 
         time.sleep(CHECK_INTERVAL)
 
+# === BOT VITRINE (discord.py) ===
+
+intents = discord.Intents.default()
+client = discord.Client(intents=intents)
+
+def build_vitrine_embed(product, stock, price):
+    dispo = "🟢 En stock" if stock > 0 else "🔴 Rupture"
+    embed = discord.Embed(
+        title=product["name"],
+        description=f"{dispo}\n📦 Stock : **{stock}**\n💰 Prix : {price}",
+        color=discord.Color.green() if stock > 0 else discord.Color.red()
+    )
+    return embed
+
+async def update_vitrine():
+    await client.wait_until_ready()
+    channel_objects = {k: client.get_channel(v) for k, v in CHANNELS.items()}
+
+    while not client.is_closed():
+        products = get_products()
+        for p in products:
+            pid = str(p["id"])
+            stock = p.get("stock_count", 0)
+            price = p.get("price") or "N/A"
+
+            embed = build_vitrine_embed(p, stock, price)
+
+            # Logique de routing vers salon
+            if "Nitro" in p["name"]:
+                channel = channel_objects["Nitro"]
+            elif "Online" in p["name"]:
+                channel = channel_objects["Membres Online"]
+            elif "Offline" in p["name"]:
+                channel = channel_objects["Membres Offline"]
+            else:
+                channel = channel_objects["Boost"]
+
+            if pid in message_map:
+                try:
+                    msg = await channel.fetch_message(message_map[pid])
+                    await msg.edit(embed=embed)
+                except discord.NotFound:
+                    new_msg = await channel.send(embed=embed)
+                    message_map[pid] = new_msg.id
+            else:
+                new_msg = await channel.send(embed=embed)
+                message_map[pid] = new_msg.id
+
+        await asyncio.sleep(10)  # refresh toutes les 10 sec
+
+@client.event
+async def on_ready():
+    print(f"✅ Vitrine connectée en tant que {client.user}")
+
+client.loop.create_task(update_vitrine())
+
 # === FLASK POUR LE PING ===
 app = Flask(__name__)
 
@@ -134,5 +206,6 @@ def start_flask():
 
 # === MAIN ===
 if __name__ == "__main__":
-    threading.Thread(target=start_flask).start()  # lance Flask
-    bot_loop()  # lance le bot
+    threading.Thread(target=start_flask).start()   # Flask
+    threading.Thread(target=bot_loop).start()      # Restock
+    client.run(DISCORD_TOKEN)                      # Vitrine
