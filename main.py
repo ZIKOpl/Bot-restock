@@ -141,7 +141,13 @@ def bot_loop():
 # === BOT VITRINE (discord.py) ===
 
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
+
+class MyClient(discord.Client):
+    async def setup_hook(self):
+        # Lance la vitrine automatiquement
+        self.bg_task = asyncio.create_task(update_vitrine(self))
+
+client = MyClient(intents=intents)
 
 def build_vitrine_embed(product, stock, price):
     dispo = "🟢 En stock" if stock > 0 else "🔴 Rupture"
@@ -152,7 +158,7 @@ def build_vitrine_embed(product, stock, price):
     )
     return embed
 
-async def update_vitrine():
+async def update_vitrine(client):
     await client.wait_until_ready()
     channel_objects = {k: client.get_channel(v) for k, v in CHANNELS.items()}
 
@@ -161,7 +167,7 @@ async def update_vitrine():
         for p in products:
             pid = str(p["id"])
             stock = p.get("stock_count", 0)
-            price = p.get("price") or "N/A"
+            price = get_product_price(p)
 
             embed = build_vitrine_embed(p, stock, price)
 
@@ -191,8 +197,6 @@ async def update_vitrine():
 @client.event
 async def on_ready():
     print(f"✅ Vitrine connectée en tant que {client.user}")
-
-client.loop.create_task(update_vitrine())
 
 # === FLASK POUR LE PING ===
 app = Flask(__name__)
