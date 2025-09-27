@@ -54,7 +54,7 @@ def get_product_price(product):
 def send_embed(event_type, product_name, product_url, stock, price=None, diff=0):
     if event_type == "restock":
         title = f"🚀 Restock ! {product_name}"
-        description = f"Le produit **{product_name}** est de retour en stock ! 🎉"
+        description = f"Le produit **{product_name}** est de retour en stock !"
         color = 0x00ff00
     elif event_type == "add":
         title = f"📈 Stock augmenté | {product_name}"
