@@ -82,7 +82,11 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
         "footer": {"text": "ZIKO SHOP"}
     }
 
-    payload = {"embeds": [embed]}
+    payload = {
+        "content": "@everyone",  # <-- Mention @everyone ici
+        "embeds": [embed]
+    }
+
     try:
         r = requests.post(WEBHOOK_URL, json=payload)
         if r.status_code == 204:
