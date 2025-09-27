@@ -40,10 +40,10 @@ CHANNEL_KEYWORDS = {
     "Message Réaction": ["Message Réaction"]
 }
 
-# Stocke messages vitrine {clé_unique: message_id}
+# Stocke messages vitrine {product_id: message_id}
 message_map = {}
 
-# === BOT RESTOCK ===
+# === BOT RESTOCK (Webhook) ===
 
 def get_products():
     headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -159,12 +159,33 @@ class MyClient(discord.Client):
 
 client = MyClient(intents=intents)
 
-def build_vitrine_embed(product, stock, price):
-    dispo = "🟢 En stock" if stock > 0 else "🔴 Rupture"
+def build_vitrine_embed(product):
+    variants = product.get("variants", [])
+    if not variants:
+        variants = [{"name": product["name"], "stock_count": product.get("stock_count", 0),
+                     "price": get_product_price(product)}]
+
+    # Trier les variantes par stock ou quantité (du plus petit au plus grand)
+    def variant_key(v):
+        return v.get("stock_count", 0)
+    variants = sorted(variants, key=variant_key)
+
+    # Description de l'embed
+    lines = []
+    in_stock = False
+    for v in variants:
+        stock = v.get("stock_count", 0)
+        price = v.get("price") or get_product_price(product)
+        if stock > 0:
+            in_stock = True
+        lines.append(f"{v.get('name')}: {stock} unités - {format_price(price)}")
+
+    dispo = "🟢 En stock" if in_stock else "🔴 Rupture"
+
     embed = discord.Embed(
         title=product["name"],
-        description=f"{dispo}\n📦 Stock : **{stock}**\n💰 Prix : {price}",
-        color=discord.Color.green() if stock > 0 else discord.Color.red()
+        description=f"{dispo}\n\n" + "\n".join(lines),
+        color=discord.Color.green() if in_stock else discord.Color.red()
     )
     return embed
 
@@ -172,7 +193,7 @@ def get_channel_for_product(product_name, channel_objects):
     for key, keywords in CHANNEL_KEYWORDS.items():
         if any(kw == product_name or kw in product_name for kw in keywords):
             return channel_objects[key]
-    return None  # Aucun salon si pas de match
+    return None
 
 async def update_vitrine(client):
     await client.wait_until_ready()
@@ -182,13 +203,10 @@ async def update_vitrine(client):
         products = get_products()
         for p in products:
             pid = str(p["id"])
-            stock = p.get("stock_count", 0)
-            price = get_product_price(p)
-
-            embed = build_vitrine_embed(p, stock, price)
+            embed = build_vitrine_embed(p)
             channel = get_channel_for_product(p["name"], channel_objects)
             if channel is None:
-                continue  # ignore produits non matchés
+                continue
 
             # clé unique pour message_map
             key = f"{pid}"
@@ -221,6 +239,6 @@ def start_flask():
 
 # === MAIN ===
 if __name__ == "__main__":
-    threading.Thread(target=start_flask).start()
-    threading.Thread(target=bot_loop).start()
-    client.run(DISCORD_TOKEN)
+    threading.Thread(target=start_flask).start()  # Flask
+    threading.Thread(target=bot_loop).start()     # Restock
+    client.run(DISCORD_TOKEN)                     # Vitrine
