@@ -31,7 +31,6 @@ CHANNELS = {
     "Message Réaction": 1419054351108018391  # exemple
 }
 
-# Mapping mot-clé pour salon
 CHANNEL_KEYWORDS = {
     "Nitro": ["Nitro Basic", "Nitro Boost"],
     "Membres Online": ["Online"],
@@ -165,12 +164,10 @@ def build_vitrine_embed(product):
         variants = [{"name": product["name"], "stock_count": product.get("stock_count", 0),
                      "price": get_product_price(product)}]
 
-    # Trier les variantes par stock ou quantité (du plus petit au plus grand)
-    def variant_key(v):
-        return v.get("stock_count", 0)
-    variants = sorted(variants, key=variant_key)
+    # Trier variantes par stock ou quantité
+    variants = sorted(variants, key=lambda v: v.get("stock_count", 0))
 
-    # Description de l'embed
+    # Construire description
     lines = []
     in_stock = False
     for v in variants:
@@ -178,7 +175,7 @@ def build_vitrine_embed(product):
         price = v.get("price") or get_product_price(product)
         if stock > 0:
             in_stock = True
-        lines.append(f"{v.get('name')}: {stock} unités - {format_price(price)}")
+        lines.append(f"**{v.get('name')}** : {stock} unités | {format_price(price)}")
 
     dispo = "🟢 En stock" if in_stock else "🔴 Rupture"
 
@@ -187,6 +184,7 @@ def build_vitrine_embed(product):
         description=f"{dispo}\n\n" + "\n".join(lines),
         color=discord.Color.green() if in_stock else discord.Color.red()
     )
+    embed.set_footer(text="ZIKO SHOP")
     return embed
 
 def get_channel_for_product(product_name, channel_objects):
@@ -208,7 +206,6 @@ async def update_vitrine(client):
             if channel is None:
                 continue
 
-            # clé unique pour message_map
             key = f"{pid}"
             if key in message_map:
                 try:
