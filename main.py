@@ -31,7 +31,7 @@ CHANNEL_KEYWORDS = {
     "Membres Online": ["membres online"],
     "Membres Offline": ["membres offline"],
     "Boost": ["boost", "serve boost"],
-    "Messages Réactions": ["message réaction"]
+    "Messages Réactions": ["message réaction", "messages réaction"]
 }
 
 message_map = {}
