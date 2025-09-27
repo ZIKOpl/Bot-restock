@@ -79,7 +79,7 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
         "color": color,
         "fields": fields,
         "image": {"url": DEFAULT_IMAGE_URL},
-        "footer": {"text": "⚡ ZIKO Shop"}
+        "footer": {"text": "ZIKO SHOP"}
     }
 
     payload = {"embeds": [embed]}
