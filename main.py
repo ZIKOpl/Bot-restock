@@ -67,7 +67,7 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
 
     fields = [
         {"name": "📦 Stock actuel", "value": str(stock), "inline": True},
-        {"name": "🛒 Lien d'achat", "value": f"[Clique ici pour acheter]({product_url})", "inline": True}
+        {"name": "🛒 Lien d'achat", "value": f"[Clique ici]({product_url})", "inline": True}
     ]
 
     if price:
