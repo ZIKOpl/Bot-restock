@@ -1,6 +1,5 @@
 import os
 import requests
-import time
 import threading
 import asyncio
 import discord
@@ -9,15 +8,13 @@ from flask import Flask
 # === CONFIG ===
 SHOP_ID = os.environ.get("SHOP_ID", "181618")
 AUTH_TOKEN = os.environ.get("AUTH_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-CHECK_INTERVAL = 5  # secondes
+CHECK_INTERVAL = 10  # secondes
 
 API_URL = f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products"
-last_stock = {}
 DEFAULT_IMAGE_URL = "https://imagedelivery.net/HL_Fwm__tlvUGLZF2p74xw/ce50fff9-ba1b-4e48-514b-4734633d6f00/public"
 
-# === CONFIG SALONS ===
+# === SALONS ===
 CHANNELS = {
     "Nitro": 1418965921116065852,
     "Membres Online": 1418969590251130953,
@@ -46,14 +43,7 @@ def get_products():
         print("❌ Erreur API:", r.status_code, r.text)
         return []
 
-def format_price(price):
-    try:
-        price_float = float(price)
-        return f"{price_float:.2f} €"
-    except:
-        return str(price)
-
-def get_product_price_range(product):
+def get_price_range(product):
     variants = product.get("variants", [])
     prices = []
     for v in variants:
@@ -65,104 +55,33 @@ def get_product_price_range(product):
                 continue
     if prices:
         min_price, max_price = min(prices), max(prices)
-        price_str = f"{min_price:.2f}€"
-        if min_price != max_price:
-            price_str += f" → {max_price:.2f}€"
+        return f"{min_price:.2f}€ → {max_price:.2f}€" if min_price != max_price else f"{min_price:.2f}€"
     else:
-        price_str = product.get("price") or "N/A"
-    return price_str
-
-# === RESTOCK WEBHOOK ===
-def send_embed(event_type, product_name, product_url, stock, price=None, diff=0):
-    if event_type == "restock":
-        title = f"🚀 Restock ! {product_name}"
-        description = f"Le produit **{product_name}** est de retour en stock !"
-        color = 0x00ff00
-    elif event_type == "add":
-        title = f"📈 Stock augmenté | {product_name}"
-        description = f"➕ {diff} unités ajoutées\n📦 Nouveau stock : **{stock}**"
-        color = 0x3498db
-    elif event_type == "oos":
-        title = f"❌ Rupture de stock | {product_name}"
-        description = f"Le produit **{product_name}** est maintenant en rupture ! 🛑"
-        color = 0xff0000
-    else:
-        return
-
-    fields = [
-        {"name": "📦 Stock actuel", "value": str(stock), "inline": True},
-        {"name": "🛒 Lien d'achat", "value": f"[Clique ici]({product_url})", "inline": True}
-    ]
-
-    if price:
-        fields.append({"name": "💰 Prix", "value": price, "inline": True})
-
-    embed = {
-        "title": title,
-        "description": description,
-        "color": color,
-        "fields": fields,
-        "image": {"url": DEFAULT_IMAGE_URL},
-        "footer": {"text": "ZIKO SHOP"}
-    }
-
-    payload = {"content": "@everyone", "embeds": [embed]}
-    try:
-        r = requests.post(WEBHOOK_URL, json=payload)
-        if r.status_code == 204:
-            print(f"✅ {event_type} envoyé: {product_name}")
-        else:
-            print(f"❌ Erreur Discord Webhook: {r.status_code} - {r.text}")
-    except Exception as e:
-        print("❌ Erreur Webhook:", e)
-
-def bot_loop():
-    global last_stock
-    print("🤖 Bot de restock démarré...")
-    while True:
-        products = get_products()
-        for p in products:
-            pid = str(p.get("id"))
-            stock = p.get("stock_count") or 0
-            name = p.get("name", "Produit inconnu")
-            url = p.get("url") or f"https://zikoshop.mysellauth.com/product/{p.get('path', pid)}"
-            price = get_product_price_range(p)
-
-            old_stock = last_stock.get(pid, 0)
-
-            if old_stock == 0 and stock > 0:
-                send_embed("restock", name, url, stock, price)
-            elif old_stock > 0 and stock > old_stock:
-                diff = stock - old_stock
-                send_embed("add", name, url, stock, price, diff)
-            elif old_stock > 0 and stock == 0:
-                send_embed("oos", name, url, stock, price)
-
-            last_stock[pid] = stock
-
-        time.sleep(CHECK_INTERVAL)
-
-# === VITRINE DISCORD ===
-intents = discord.Intents.default()
-intents.messages = True
-client = discord.Client(intents=intents)
+        return product.get("price") or "N/A"
 
 def get_channel_for_product(product_name, channel_objects):
     name_lower = product_name.lower()
     for key, keywords in CHANNEL_KEYWORDS.items():
         for kw in keywords:
             if kw.lower() in name_lower:
-                return channel_objects[key]
+                return channel_objects.get(key)
     return None
 
-def build_vitrine_embed(product):
+# === BOT VITRINE DISCORD ===
+intents = discord.Intents.default()
+intents.messages = True
+client = discord.Client(intents=intents)
+
+def build_embed(product):
     stock = product.get("stock_count", 0)
-    price_str = get_product_price_range(product)
-    dispo = "🟢 En stock" if stock > 0 else "🔴 Rupture"
-    
+    price_str = get_price_range(product)
+    title = product.get("name", "Produit inconnu")
+    url = product.get("url") or f"https://zikoshop.mysellauth.com/product/{product.get('path', product.get('id'))}"
+
     embed = discord.Embed(
-        title=product.get("name", "Produit inconnu"),
-        description=f"{dispo}\n📦 Stock : **{stock}**\n💰 Prix : {price_str}",
+        title=title,
+        url=url,
+        description=f"📦 Stock : **{stock}**\n💰 Prix : {price_str}",
         color=discord.Color.green() if stock > 0 else discord.Color.red()
     )
     embed.set_footer(text="ZIKO SHOP")
@@ -173,6 +92,15 @@ async def update_vitrine():
     await client.wait_until_ready()
     channel_objects = {k: client.get_channel(v) for k, v in CHANNELS.items()}
 
+    # Nettoyer les anciens messages pour éviter doublons
+    for key, channel in channel_objects.items():
+        if channel:
+            async for msg in channel.history(limit=50):
+                try:
+                    await msg.delete()
+                except:
+                    continue
+
     while not client.is_closed():
         products = get_products()
         for p in products:
@@ -181,7 +109,7 @@ async def update_vitrine():
             if not channel:
                 continue
 
-            embed = build_vitrine_embed(p)
+            embed = build_embed(p)
 
             if pid in message_map:
                 try:
@@ -194,7 +122,7 @@ async def update_vitrine():
                 new_msg = await channel.send(embed=embed)
                 message_map[pid] = new_msg.id
 
-        await asyncio.sleep(10)
+        await asyncio.sleep(CHECK_INTERVAL)
 
 @client.event
 async def on_ready():
@@ -213,5 +141,4 @@ def start_flask():
 # === MAIN ===
 if __name__ == "__main__":
     threading.Thread(target=start_flask).start()
-    threading.Thread(target=bot_loop).start()
     client.run(DISCORD_TOKEN)
