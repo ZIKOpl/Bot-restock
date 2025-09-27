@@ -136,6 +136,7 @@ def build_embed(product):
         description=f"{dispo}\n📦 Stock : **{stock}**\n💰 Prix : {min_price} → {max_price}",
         color=discord.Color.green() if stock > 0 else discord.Color.red()
     )
+    embed.set_footer(text="ZIKO SHOP")
     return embed
 
 def route_channel(product):
@@ -151,7 +152,7 @@ def route_channel(product):
     elif "online" in name:
         return CHANNELS["Membres Online"]
     else:
-        return CHANNELS["Boost"]  # fallback
+        return CHANNELS["Boost"]
 
 async def update_vitrine():
     await client.wait_until_ready()
