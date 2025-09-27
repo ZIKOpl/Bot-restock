@@ -16,21 +16,22 @@ CHECK_INTERVAL = 5  # secondes
 # URL API SellAuth
 API_URL = f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products"
 
-# Dictionnaire pour stocker l'état précédent
+# Stock précédent pour restock
 last_stock = {}
 
-# Photo fixe pour restock (embeds annonces)
+# Photo fixe pour embeds restock
 DEFAULT_IMAGE_URL = "https://imagedelivery.net/HL_Fwm__tlvUGLZF2p74xw/ce50fff9-ba1b-4e48-514b-4734633d6f00/public"
 
-# === CONFIG SALONS POUR VITRINE ===
+# === CONFIG SALONS VITRINE ===
 CHANNELS = {
     "Nitro": 1418965921116065852,
     "Membres Online": 1418969590251130953,
     "Membres Offline": 1418969590251130953,
     "Boost": 1418996481032978643,
-    "Message Réaction": 1419054351108018391
+    "Message Réaction": 1419054351108018391  # exemple
 }
 
+# Mapping mot-clé pour salon
 CHANNEL_KEYWORDS = {
     "Nitro": ["Nitro Basic", "Nitro Boost"],
     "Membres Online": ["Online"],
@@ -39,10 +40,10 @@ CHANNEL_KEYWORDS = {
     "Message Réaction": ["Message Réaction"]
 }
 
-# Stocke les messages de vitrine {product_id: message_id}
+# Stocke messages vitrine {clé_unique: message_id}
 message_map = {}
 
-# === BOT RESTOCK (Webhook) ===
+# === BOT RESTOCK ===
 
 def get_products():
     headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -150,10 +151,10 @@ def bot_loop():
 # === BOT VITRINE (discord.py) ===
 
 intents = discord.Intents.default()
+intents.messages = True
 
 class MyClient(discord.Client):
     async def setup_hook(self):
-        # Lance la vitrine automatiquement
         self.bg_task = asyncio.create_task(update_vitrine(self))
 
 client = MyClient(intents=intents)
@@ -169,10 +170,9 @@ def build_vitrine_embed(product, stock, price):
 
 def get_channel_for_product(product_name, channel_objects):
     for key, keywords in CHANNEL_KEYWORDS.items():
-        if any(kw in product_name for kw in keywords):
+        if any(kw == product_name or kw in product_name for kw in keywords):
             return channel_objects[key]
-    # fallback
-    return channel_objects.get("Boost")
+    return None  # Aucun salon si pas de match
 
 async def update_vitrine(client):
     await client.wait_until_ready()
@@ -187,25 +187,29 @@ async def update_vitrine(client):
 
             embed = build_vitrine_embed(p, stock, price)
             channel = get_channel_for_product(p["name"], channel_objects)
+            if channel is None:
+                continue  # ignore produits non matchés
 
-            if pid in message_map:
+            # clé unique pour message_map
+            key = f"{pid}"
+            if key in message_map:
                 try:
-                    msg = await channel.fetch_message(message_map[pid])
+                    msg = await channel.fetch_message(message_map[key])
                     await msg.edit(embed=embed)
                 except discord.NotFound:
                     new_msg = await channel.send(embed=embed)
-                    message_map[pid] = new_msg.id
+                    message_map[key] = new_msg.id
             else:
                 new_msg = await channel.send(embed=embed)
-                message_map[pid] = new_msg.id
+                message_map[key] = new_msg.id
 
-        await asyncio.sleep(10)  # refresh toutes les 10 sec
+        await asyncio.sleep(10)
 
 @client.event
 async def on_ready():
     print(f"✅ Vitrine connectée en tant que {client.user}")
 
-# === FLASK POUR LE PING ===
+# === FLASK POUR PING ===
 app = Flask(__name__)
 
 @app.route("/")
@@ -217,6 +221,6 @@ def start_flask():
 
 # === MAIN ===
 if __name__ == "__main__":
-    threading.Thread(target=start_flask).start()   # Flask
-    threading.Thread(target=bot_loop).start()      # Restock
-    client.run(DISCORD_TOKEN)                      # Vitrine
+    threading.Thread(target=start_flask).start()
+    threading.Thread(target=bot_loop).start()
+    client.run(DISCORD_TOKEN)
