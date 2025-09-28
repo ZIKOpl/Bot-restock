@@ -56,7 +56,7 @@ def get_product_image_url(product_url):
 
 def get_products():
     headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
-    r = requests.get(f"https://api.mysellauth.com/v1/shops/{SHOP_ID}/products", headers=headers)
+    r = requests.get(f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products", headers=headers)
     if r.status_code == 200:
         return r.json().get("data", [])
     else:
@@ -132,7 +132,7 @@ def bot_loop():
             pid = str(p.get("id"))
             stock = p.get("stock_count") or 0
             name = p.get("name", "Produit inconnu")
-            url = p.get("url") or f"https://zikoshop.mysellauth.com/product/{p.get('path', pid)}"
+            url = p.get("url") or f"https://zikoshop.sellauth.com/product/{p.get('path', pid)}"
             price = p.get("price") or get_product_price_range(p)[0]
 
             old_stock = last_stock.get(pid, 0)
@@ -157,7 +157,7 @@ def build_pro_embed(product):
     stock = product.get("stock_count", 0)
     min_price, max_price = get_product_price_range(product)
     title = product["name"]
-    url = product.get("url") or f"https://zikoshop.mysellauth.com/product/{product.get('path', product['id'])}"
+    url = product.get("url") or f"https://zikoshop.sellauth.com/product/{product.get('path', product['id'])}"
     image_url = get_product_image_url(url)
 
     dispo = "🟢 En stock" if stock > 0 else "🔴 Rupture"
