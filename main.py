@@ -24,7 +24,7 @@ CHANNELS = {
     "Membres": 1418969590251130953,
     "Boost": 1418996481032978643,
     "Deco": 1418968022126821386,
-    "acc": 1420167094888300554,
+    "Acc": 1420167094888300554,
     "Reactions": 1419054351108018391
 }
 
@@ -188,18 +188,20 @@ async def update_vitrine():
                 pid = str(p["id"])
                 name = p.get("name", "").lower()
 
-                # Routing
+                # Routing précis
                 if "nitro" in name:
                     channel = channels["Nitro"]
                 elif "reaction" in name:
                     channel = channels["Reactions"]
-                elif "member" in name or "offline" in name or "online" in name:
+                elif any(x in name for x in ["member", "online", "offline"]):
                     channel = channels["Membres"]
-                elif "decoration" in name or "décoration" in name:
+                elif any(x in name for x in ["decoration", "décoration"]):
                     channel = channels["Deco"]
-                elif "account" in name or "account" in name:
-                    channel = channels["acc"]
-                else: "boost" in name or "boost" in name:
+                elif any(x in name for x in ["discordaccount", "account"]):
+                    channel = channels["Acc"]
+                elif any(x in name for x in ["serverboost", "14x"]):
+                    channel = channels["Boost"]
+                else:
                     channel = channels["Boost"]
 
                 embed = build_pro_embed(p)
@@ -210,6 +212,7 @@ async def update_vitrine():
                         msg = await channel.fetch_message(message_map[pid])
                         await msg.edit(embed=embed)
                     except discord.NotFound:
+                        message_map.pop(pid, None)
                         new_msg = await channel.send(embed=embed)
                         message_map[pid] = new_msg.id
                         save_message_map()
