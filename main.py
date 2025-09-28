@@ -195,9 +195,9 @@ async def update_vitrine():
                     channel = channels["Reactions"]
                 elif "member" in name or "offline" in name or "online" in name:
                     channel = channels["Membres"]
-                elif "decoration" in name or "Décoration" in name:
+                elif "decoration" in name or "décoration" in name:
                     channel = channels["Deco"]
-                elif "Discord Account" in name or "Discord Account" in name:
+                elif "discord-account" in name or "Discord Account" in name:
                     channel = channels["acc"]
                 else:
                     channel = channels["Boost"]
