@@ -199,7 +199,7 @@ async def update_vitrine():
                     channel = channels["Deco"]
                 elif "account" in name or "account" in name:
                     channel = channels["acc"]
-                else:
+                else: "boost" in name or "boost" in name:
                     channel = channels["Boost"]
 
                 embed = build_pro_embed(p)
