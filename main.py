@@ -24,6 +24,7 @@ CHANNELS = {
     "Membres": 1418969590251130953,
     "Boost": 1418996481032978643,
     "Deco": 1418968022126821386,
+    "acc": 1420167094888300554,
     "Reactions": 1419054351108018391
 }
 
@@ -194,8 +195,10 @@ async def update_vitrine():
                     channel = channels["Reactions"]
                 elif "member" in name or "offline" in name or "online" in name:
                     channel = channels["Membres"]
-                elif "decoration" in name or "décoration" in name:
+                elif "decoration" in name or "Décoration" in name:
                     channel = channels["Deco"]
+                elif "Discord Account" in name or "Discord Account" in name:
+                    channel = channels["acc"]
                 else:
                     channel = channels["Boost"]
 
