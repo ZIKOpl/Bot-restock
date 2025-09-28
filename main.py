@@ -5,6 +5,7 @@ import threading
 import asyncio
 import discord
 from flask import Flask
+import json
 
 # === CONFIG ===
 SHOP_ID = os.environ.get("SHOP_ID", "181618")
@@ -28,11 +29,24 @@ CHANNELS = {
     "Membres": 1418969590251130953,  # Online & Offline ensemble
     "Boost": 1418996481032978643,
     "Deco": 1418968022126821386,
-    "Reactions": 1419054351108018391  # Exemple
+    "Reactions": 1419054351108018391
 }
 
-# Stocke les messages de vitrine {product_id: message_id}
-message_map = {}
+# === MESSAGE MAP (persistant JSON) ===
+MESSAGE_FILE = "message_map.json"
+
+if os.path.exists(MESSAGE_FILE):
+    with open(MESSAGE_FILE, "r") as f:
+        try:
+            message_map = json.load(f)
+        except json.JSONDecodeError:
+            message_map = {}
+else:
+    message_map = {}
+
+def save_message_map():
+    with open(MESSAGE_FILE, "w") as f:
+        json.dump(message_map, f)
 
 # === BOT RESTOCK (Webhook) ===
 def get_products():
@@ -52,7 +66,6 @@ def format_price(price):
         return str(price)
 
 def get_product_price_range(product):
-    """Retourne le prix min et max des variantes si elles existent"""
     variants = product.get("variants", [])
     if not variants:
         price = product.get("price") or product.get("formatted_price") or "N/A"
@@ -67,7 +80,6 @@ def get_product_price_range(product):
     return f"{min(prices):.2f} €", f"{max(prices):.2f} €"
 
 def get_product_price(product):
-    """Retourne le prix standard si pas de variantes"""
     price = product.get("price") or product.get("formatted_price")
     if price:
         return price
@@ -111,10 +123,7 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
         "footer": {"text": "ZIKO SHOP"}
     }
 
-    payload = {
-        "content": "@everyone",
-        "embeds": [embed]
-    }
+    payload = {"content": "@everyone", "embeds": [embed]}
 
     try:
         r = requests.post(WEBHOOK_URL, json=payload)
@@ -180,7 +189,6 @@ async def update_vitrine():
         for p in products:
             pid = str(p["id"])
 
-            # Logique de routing
             name = p.get("name", "").lower()
             if "nitro" in name:
                 channel = channel_objects["Nitro"]
@@ -195,19 +203,20 @@ async def update_vitrine():
 
             embed = build_vitrine_embed(p)
 
-            # Update ou send
             if pid in message_map:
                 try:
-                    msg = await channel.fetch_message(message_map[pid])
+                    msg = await channel.fetch_message(int(message_map[pid]))
                     await msg.edit(embed=embed)
                 except discord.NotFound:
                     new_msg = await channel.send(embed=embed)
                     message_map[pid] = new_msg.id
+                    save_message_map()
             else:
                 new_msg = await channel.send(embed=embed)
                 message_map[pid] = new_msg.id
+                save_message_map()
 
-        await asyncio.sleep(10)  # refresh toutes les 10 sec
+        await asyncio.sleep(10)
 
 @client.event
 async def on_ready():
@@ -225,11 +234,9 @@ def start_flask():
 
 # === MAIN ===
 if __name__ == "__main__":
-    # Flask et bot restock dans des threads
     threading.Thread(target=start_flask).start()
     threading.Thread(target=bot_loop).start()
 
-    # Discord bot async correct
     async def main():
         async with client:
             asyncio.create_task(update_vitrine())
