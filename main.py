@@ -27,6 +27,7 @@ CHANNELS = {
     "Nitro": 1418965921116065852,
     "Membres": 1418969590251130953,  # Online & Offline ensemble
     "Boost": 1418996481032978643,
+    "decoration": 1418968022126821386,
     "Reactions": 1419054351108018391  # Exemple
 }
 
@@ -187,6 +188,8 @@ async def update_vitrine():
                 channel = channel_objects["Reactions"]
             elif "member" in name or "offline" in name or "online" in name:
                 channel = channel_objects["Membres"]
+            elif "decoration" in name or "décoration" in name:
+                channel = channel_objects["decoration"]
             else:
                 channel = channel_objects["Boost"]
 
