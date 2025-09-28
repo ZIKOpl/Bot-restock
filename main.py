@@ -26,7 +26,7 @@ DEFAULT_IMAGE_URL = "https://imagedelivery.net/HL_Fwm__tlvUGLZF2p74xw/ce50fff9-b
 # === CONFIG SALONS POUR VITRINE ===
 CHANNELS = {
     "Nitro": 1418965921116065852,
-    "Membres": 1418969590251130953,  # Online & Offline ensemble
+    "Membres": 1418969590251130953,
     "Boost": 1418996481032978643,
     "Deco": 1418968022126821386,
     "Reactions": 1419054351108018391
@@ -221,6 +221,33 @@ async def update_vitrine():
 @client.event
 async def on_ready():
     print(f"✅ Vitrine connectée en tant que {client.user}")
+
+# === COMMANDE ADMIN RESET ===
+@client.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.strip().lower() == "!reset_vitrine":
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send("❌ Tu n'as pas la permission d'utiliser cette commande.")
+            return
+
+        deleted = 0
+        for pid, msg_id in list(message_map.items()):
+            for cid in CHANNELS.values():
+                try:
+                    channel = client.get_channel(cid)
+                    msg = await channel.fetch_message(int(msg_id))
+                    await msg.delete()
+                    deleted += 1
+                except Exception:
+                    pass
+
+        message_map.clear()
+        save_message_map()
+
+        await message.channel.send(f"✅ Vitrine reset ({deleted} messages supprimés).")
 
 # === FLASK POUR LE PING ===
 app = Flask(__name__)
