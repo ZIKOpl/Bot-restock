@@ -15,7 +15,6 @@ WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 CHECK_INTERVAL = 5  # secondes
 MESSAGE_MAP_FILE = "message-map.json"
-
 DEFAULT_IMAGE_URL = "https://imagedelivery.net/HL_Fwm__tlvUGLZF2p74xw/ce50fff9-ba1b-4e48-514b-4734633d6f00/public"
 
 # === CHANNELS ===
@@ -244,6 +243,37 @@ async def resetvitrine(ctx):
         os.remove(MESSAGE_MAP_FILE)
     await ctx.send("🔄 Vitrine réinitialisée. Tous les embeds seront recréés au prochain cycle.")
 
+# --- SLASH COMMAND /stock ---
+from discord import app_commands
+
+tree = app_commands.CommandTree(bot)
+
+@tree.command(name="stock", description="Affiche le stock et les prix de tous les produits")
+async def stock(interaction: discord.Interaction):
+    products = get_products()
+    if not products:
+        await interaction.response.send_message("❌ Aucun produit trouvé.", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title="📦 Stocks actuels - ZIKO SHOP",
+        description="Voici le récapitulatif des produits avec leur stock et prix",
+        color=discord.Color.blue()
+    )
+
+    for p in products:
+        stock_count = p.get("stock_count", 0)
+        min_price, max_price = get_product_price_range(p)
+        name = p.get("name", "Produit inconnu")
+        dispo = "🟢 En stock" if stock_count > 0 else "🔴 Rupture"
+        embed.add_field(
+            name=name,
+            value=f"{dispo}\n📦 Stock : {stock_count}\n💰 Prix : {min_price} - {max_price}",
+            inline=False
+        )
+
+    await interaction.response.send_message(embed=embed, ephemeral=False)
+
 # --- FLASK POUR PING ---
 app = Flask(__name__)
 
@@ -258,8 +288,16 @@ def start_flask():
 if __name__ == "__main__":
     threading.Thread(target=start_flask).start()
     threading.Thread(target=bot_loop).start()
+    
     async def main():
         async with bot:
             asyncio.create_task(update_vitrine())
             await bot.start(DISCORD_TOKEN)
+    
+    # Synchronisation des slash commands
+    @bot.event
+    async def on_ready():
+        await tree.sync()
+        print(f"✅ Bot connecté en tant que {bot.user} et slash commands synchronisées")
+
     asyncio.run(main())
