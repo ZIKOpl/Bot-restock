@@ -42,6 +42,17 @@ def save_message_map():
     with open(MESSAGE_MAP_FILE, "w") as f:
         json.dump(message_map, f)
 
+def get_product_image_url(product_url):
+    try:
+        r = requests.get(product_url)
+        r.raise_for_status()
+        html = r.text
+        start_index = html.find('<meta property="og:image" content="') + len('<meta property="og:image" content="')
+        end_index = html.find('"', start_index)
+        return html[start_index:end_index]
+    except requests.RequestException:
+        return DEFAULT_IMAGE_URL
+
 def get_products():
     headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
     r = requests.get(f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products", headers=headers)
@@ -138,6 +149,7 @@ def bot_loop():
 
 # --- DISCORD BOT ---
 intents = discord.Intents.default()
+intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents)
 
 def build_pro_embed(product):
@@ -145,6 +157,7 @@ def build_pro_embed(product):
     min_price, max_price = get_product_price_range(product)
     title = product["name"]
     url = product.get("url") or f"https://zikoshop.mysellauth.com/product/{product.get('path', product['id'])}"
+    image_url = get_product_image_url(url)
 
     dispo = "🟢 En stock" if stock > 0 else "🔴 Rupture"
     color = discord.Color.green() if stock > 0 else discord.Color.red()
@@ -158,7 +171,7 @@ def build_pro_embed(product):
     embed.add_field(name="📦 Stock", value=f"**{stock} unités**", inline=True)
     embed.add_field(name="💰 Prix", value=f"{min_price} - {max_price}", inline=True)
     embed.add_field(name="🛒 Acheter", value=f"[Clique ici]({url})", inline=False)
-    embed.set_image(url=product.get("image_url") or DEFAULT_IMAGE_URL)
+    embed.set_image(url=image_url)
     embed.set_footer(text="ZIKO SHOP • Mise à jour en temps réel")
     return embed
 
