@@ -27,7 +27,6 @@ CHANNELS = {
     "Nitro": 1418965921116065852,
     "Membres": 1418969590251130953,  # Online & Offline ensemble
     "Boost": 1418996481032978643,
-    "decoration": 1418968022126821386,
     "Reactions": 1419054351108018391  # Exemple
 }
 
