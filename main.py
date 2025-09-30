@@ -84,9 +84,13 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
         return
 
     fields = [
-        {"name": "📦 Stock actuel", "value": str(stock), "inline": True},
-        {"name": "🛒 Lien d'achat", "value": f"[Clique ici]({product_url})", "inline": True}
+        {"name": "📦 Stock actuel", "value": str(stock), "inline": True}
     ]
+
+    # ✅ On n’ajoute le lien d’achat que si ce n’est pas une rupture
+    if event_type != "oos":
+        fields.append({"name": "🛒 Lien d'achat", "value": f"[Clique ici]({product_url})", "inline": True})
+
     if price:
         fields.append({"name": "💰 Prix", "value": format_price(price), "inline": True})
 
@@ -180,9 +184,11 @@ def build_pro_embed(product):
     )
     embed.add_field(name="📦 Stock", value=f"**{stock} unités**", inline=True)
     embed.add_field(name="💰 Prix", value=f"{min_price} - {max_price}", inline=True)
-    embed.add_field(name="🛒 Acheter", value=f"[Clique ici]({url})", inline=False)
 
-    # Pas d’image
+    # ✅ Ajouter bouton "Acheter" uniquement si stock > 0
+    if stock > 0:
+        embed.add_field(name="🛒 Acheter", value=f"[Clique ici]({url})", inline=False)
+
     embed.set_footer(text="ZIKO SHOP • Mise à jour en temps réel")
     return embed
 
