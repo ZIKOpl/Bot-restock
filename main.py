@@ -37,6 +37,12 @@ if os.path.exists(MESSAGE_MAP_FILE):
     with open(MESSAGE_MAP_FILE, "r") as f:
         message_map = json.load(f)
 
+# === CONFIG FEEDBACK ===
+FEEDBACK_URL = "https://zikoshop.mysellauth.com/feedback"
+FEEDBACK_WEBHOOK = os.environ.get("FEEDBACK_WEBHOOK")  # webhook Discord pour feedback
+CHECK_FEEDBACK_INTERVAL = 60
+last_feedback_ids = set()
+
 # === FUNCTIONS ===
 def save_message_map():
     with open(MESSAGE_MAP_FILE, "w") as f:
@@ -273,7 +279,55 @@ async def stock(interaction: discord.Interaction):
         )
 
     await interaction.response.send_message(embed=embed, ephemeral=False)
+# === FEEDBACKS ===
+def get_feedbacks():
+    try:
+        r = requests.get(FEEDBACK_URL, timeout=10)
+        if r.status_code == 200:
+            return r.json()
+    except Exception as e:
+        print("❌ Erreur récupération feedbacks:", e)
+    return []
 
+def build_feedback_embed(feedback):
+    rating = int(feedback.get("rating", 0))
+    stars = "⭐" * rating
+    text = feedback.get("text", "Aucun avis fourni")
+    product = feedback.get("product", {}).get("name", "Produit inconnu")
+    author = feedback.get("author", "Anonyme")
+
+    embed = {
+        "title": "📝 Nouveau Feedback",
+        "description": f"**{author}** a laissé un avis sur le shop.",
+        "color": 0x2ecc71,
+        "fields": [
+            {"name": "⭐ Note", "value": stars, "inline": True},
+            {"name": "💬 Avis", "value": text, "inline": False},
+            {"name": "📦 Produit", "value": product, "inline": False}
+        ],
+        "footer": {"text": "ZIKO SHOP • Feedback Client"}
+    }
+    return embed
+
+def feedback_loop():
+    global last_feedback_ids
+    print("💬 Système de feedback démarré...")
+    while True:
+        feedbacks = get_feedbacks()
+        for fb in feedbacks:
+            fid = fb.get("id")
+            if fid and fid not in last_feedback_ids:
+                embed = build_feedback_embed(fb)
+                payload = {"embeds": [embed]}
+                try:
+                    r = requests.post(FEEDBACK_WEBHOOK, json=payload)
+                    if r.status_code in [200, 204]:
+                        print(f"✅ Feedback envoyé: {fid}")
+                        last_feedback_ids.add(fid)
+                except Exception as e:
+                    print("❌ Erreur envoi Feedback:", e)
+        time.sleep(CHECK_FEEDBACK_INTERVAL)
+        
 # --- FLASK POUR PING ---
 app = Flask(__name__)
 
