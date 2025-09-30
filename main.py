@@ -109,7 +109,7 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
 # === FEEDBACK SYSTEM ===
 def fetch_feedback():
     try:
-        r = requests.get("https://zikoshop.mysellauth.com/feedback")
+        r = requests.get("https://fastshopfrr.mysellauth.com/feedback")
         if r.status_code == 200:
             return r.json()
         else:
@@ -165,7 +165,7 @@ def build_pro_embed(product):
     stock = product.get("stock_count", 0)
     min_price, max_price = get_product_price_range(product)
     title = product["name"]
-    url = product.get("url") or f"https://zikoshop.sellauth.com/product/{product.get('path', product['id'])}"
+    url = product.get("url") or f"https://fastshopfrr.sellauth.com/product/{product.get('path', product['id'])}"
 
     dispo = "🟢 En stock" if stock > 0 else "🔴 Rupture"
 
