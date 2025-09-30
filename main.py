@@ -16,7 +16,6 @@ DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 FEEDBACK_WEBHOOK_URL = os.environ.get("FEEDBACK_WEBHOOK_URL")  # webhook pour feedback
 CHECK_INTERVAL = 5  # secondes
 MESSAGE_MAP_FILE = "message-map.json"
-DEFAULT_IMAGE_URL = "https://imagedelivery.net/HL_Fwm__tlvUGLZF2p74xw/ce50fff9-ba1b-4e48-514b-4734633d6f00/public"
 
 # === CHANNELS ===
 CHANNELS = {
@@ -108,7 +107,6 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
         "description": description,
         "color": color,
         "fields": fields,
-        "image": {"url": DEFAULT_IMAGE_URL},
         "footer": {"text": "ZIKO SHOP"}
     }
 
