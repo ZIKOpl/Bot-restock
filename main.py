@@ -83,11 +83,9 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
     else:
         return
 
-    fields = [
-        {"name": "📦 Stock actuel", "value": str(stock), "inline": True}
-    ]
+    fields = [{"name": "📦 Stock actuel", "value": str(stock), "inline": True}]
 
-    # ✅ On n’ajoute le lien d’achat que si ce n’est pas une rupture
+    # ✅ Pas de lien si rupture
     if event_type != "oos":
         fields.append({"name": "🛒 Lien d'achat", "value": f"[Clique ici]({product_url})", "inline": True})
 
@@ -143,9 +141,7 @@ def feedback_loop():
                 "title": "📝 Nouveau Feedback",
                 "description": f"**{rating}**\n{text}",
                 "color": 0xFFD700,
-                "fields": [
-                    {"name": "🎁 Produit", "value": product, "inline": False}
-                ],
+                "fields": [{"name": "🎁 Produit", "value": product, "inline": False}],
                 "footer": {"text": "ZIKO SHOP • Feedback client"}
             }
 
@@ -158,7 +154,7 @@ def feedback_loop():
 
             last_feedback_ids.add(fid)
 
-        time.sleep(30)  # check toutes les 30s
+        time.sleep(30)
 
 # === DISCORD BOT ===
 intents = discord.Intents.default()
@@ -173,24 +169,32 @@ def build_pro_embed(product):
 
     dispo = "🟢 En stock" if stock > 0 else "🔴 Rupture"
 
-    # Couleur fixée en bleu
-    color = discord.Color.blue()
-
     embed = discord.Embed(
         title=title,
         url=url,
         description=dispo,
-        color=color
+        color=discord.Color.blue()
     )
     embed.add_field(name="📦 Stock", value=f"**{stock} unités**", inline=True)
     embed.add_field(name="💰 Prix", value=f"{min_price} - {max_price}", inline=True)
 
-    # ✅ Ajouter bouton "Acheter" uniquement si stock > 0
     if stock > 0:
         embed.add_field(name="🛒 Acheter", value=f"[Clique ici]({url})", inline=False)
 
     embed.set_footer(text="ZIKO SHOP • Mise à jour en temps réel")
     return embed
+
+async def clear_channels():
+    """Supprimer tous les messages des salons de vitrine au démarrage"""
+    await bot.wait_until_ready()
+    for name, cid in CHANNELS.items():
+        channel = bot.get_channel(cid)
+        if channel:
+            try:
+                await channel.purge(limit=None)
+                print(f"🧹 Salon {name} vidé")
+            except Exception as e:
+                print(f"❌ Erreur purge {name}: {e}")
 
 async def update_vitrine():
     global message_map, vitrine_active
@@ -269,7 +273,7 @@ async def stock(interaction: discord.Interaction):
     embed = discord.Embed(
         title="📦 Stocks actuels - ZIKO SHOP",
         description="Voici le récapitulatif des produits avec leur stock et prix",
-        color=discord.Color.blue()  # Couleur fixée en bleu
+        color=discord.Color.blue()
     )
 
     for p in products:
@@ -302,6 +306,7 @@ if __name__ == "__main__":
 
     async def main():
         async with bot:
+            await clear_channels()  # ✅ Purge au lancement
             asyncio.create_task(update_vitrine())
             await bot.start(DISCORD_TOKEN)
 
