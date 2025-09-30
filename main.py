@@ -83,9 +83,10 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
     else:
         return
 
-    fields = [{"name": "📦 Stock actuel", "value": str(stock), "inline": True}]
+    fields = [
+        {"name": "📦 Stock actuel", "value": str(stock), "inline": True}
+    ]
 
-    # ✅ Pas de lien si rupture
     if event_type != "oos":
         fields.append({"name": "🛒 Lien d'achat", "value": f"[Clique ici]({product_url})", "inline": True})
 
@@ -141,7 +142,9 @@ def feedback_loop():
                 "title": "📝 Nouveau Feedback",
                 "description": f"**{rating}**\n{text}",
                 "color": 0xFFD700,
-                "fields": [{"name": "🎁 Produit", "value": product, "inline": False}],
+                "fields": [
+                    {"name": "🎁 Produit", "value": product, "inline": False}
+                ],
                 "footer": {"text": "ZIKO SHOP • Feedback client"}
             }
 
@@ -185,19 +188,19 @@ def build_pro_embed(product):
     return embed
 
 async def clear_channels():
-    """Supprimer tous les messages des salons de vitrine au démarrage"""
+    """Supprimer tous les messages des salons vitrines au démarrage"""
     await bot.wait_until_ready()
-    for name, cid in CHANNELS.items():
-        channel = bot.get_channel(cid)
+    for _, channel_id in CHANNELS.items():
+        channel = bot.get_channel(channel_id)
         if channel:
             try:
-                await channel.purge(limit=None)
-                print(f"🧹 Salon {name} vidé")
+                await channel.purge(limit=100)
+                print(f"🧹 Salon vidé : {channel.name}")
             except Exception as e:
-                print(f"❌ Erreur purge {name}: {e}")
+                print(f"❌ Erreur purge salon {channel_id}: {e}")
 
 async def update_vitrine():
-    global message_map, vitrine_active
+    global message_map, vitrine_active, last_stock
     await bot.wait_until_ready()
     channels = {k: bot.get_channel(v) for k, v in CHANNELS.items()}
 
@@ -206,25 +209,40 @@ async def update_vitrine():
             products = get_products()
             for p in products:
                 pid = str(p["id"])
-                name = p.get("name", "").lower()
+                stock = p.get("stock_count", 0)
+                name = p.get("name", "Produit inconnu")
+                url = p.get("url") or f"https://fastshopfrr.sellauth.com/product/{p.get('path', pid)}"
 
-                if "nitro" in name:
+                # === Détection des changements de stock ===
+                old_stock = last_stock.get(pid, stock)
+                if stock != old_stock:
+                    if stock == 0 and old_stock > 0:
+                        send_embed("oos", name, url, stock)
+                    elif old_stock == 0 and stock > 0:
+                        send_embed("restock", name, url, stock, diff=stock-old_stock)
+                    elif stock > old_stock:
+                        send_embed("add", name, url, stock, diff=stock-old_stock)
+                last_stock[pid] = stock
+
+                # === Choix du salon ===
+                pname = name.lower()
+                if "nitro" in pname:
                     channel = channels["Nitro"]
-                elif "reaction" in name:
+                elif "reaction" in pname:
                     channel = channels["Reactions"]
-                elif any(x in name for x in ["member", "online", "offline"]):
+                elif any(x in pname for x in ["member", "online", "offline"]):
                     channel = channels["Membres"]
-                elif any(x in name for x in ["decoration", "décoration"]):
+                elif any(x in pname for x in ["decoration", "décoration"]):
                     channel = channels["Deco"]
-                elif any(x in name for x in ["discordaccount", "account"]):
+                elif any(x in pname for x in ["discordaccount", "account"]):
                     channel = channels["Acc"]
-                elif any(x in name for x in ["serverboost", "14x"]):
+                elif any(x in pname for x in ["serverboost", "14x"]):
                     channel = channels["Boost"]
                 else:
                     channel = channels["Boost"]
 
+                # === Mise à jour de la vitrine ===
                 embed = build_pro_embed(p)
-
                 if pid in message_map:
                     try:
                         msg = await channel.fetch_message(message_map[pid])
@@ -306,7 +324,7 @@ if __name__ == "__main__":
 
     async def main():
         async with bot:
-            await clear_channels()  # ✅ Purge au lancement
+            asyncio.create_task(clear_channels())  # nettoyage au démarrage
             asyncio.create_task(update_vitrine())
             await bot.start(DISCORD_TOKEN)
 
