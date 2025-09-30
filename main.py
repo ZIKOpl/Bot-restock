@@ -41,18 +41,6 @@ def save_message_map():
     with open(MESSAGE_MAP_FILE, "w") as f:
         json.dump(message_map, f)
 
-# === PRODUCT HELPERS ===
-def get_product_image_url(product_url):
-    try:
-        r = requests.get(product_url)
-        r.raise_for_status()
-        html = r.text
-        start_index = html.find('<meta property="og:image" content="') + len('<meta property="og:image" content="')
-        end_index = html.find('"', start_index)
-        return html[start_index:end_index]
-    except:
-        return DEFAULT_IMAGE_URL
-
 def get_products():
     headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
     r = requests.get(f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products", headers=headers)
@@ -89,7 +77,7 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
         description = f"➕ {diff} unités ajoutées\n📦 Nouveau stock : **{stock}**"
         color = 0x3498db
     elif event_type == "oos":
-        title = f"❌ Rupture de stock | {product_name}"""
+        title = f"❌ Rupture de stock | {product_name}"
         description = f"Le produit **{product_name}** est maintenant en rupture ! 🛑"
         color = 0xff0000
     else:
@@ -178,10 +166,11 @@ def build_pro_embed(product):
     min_price, max_price = get_product_price_range(product)
     title = product["name"]
     url = product.get("url") or f"https://zikoshop.sellauth.com/product/{product.get('path', product['id'])}"
-    image_url = get_product_image_url(url)
 
     dispo = "🟢 En stock" if stock > 0 else "🔴 Rupture"
-    color = discord.Color.green() if stock > 0 else discord.Color.red()
+
+    # Couleur fixée en bleu
+    color = discord.Color.blue()
 
     embed = discord.Embed(
         title=title,
@@ -192,7 +181,8 @@ def build_pro_embed(product):
     embed.add_field(name="📦 Stock", value=f"**{stock} unités**", inline=True)
     embed.add_field(name="💰 Prix", value=f"{min_price} - {max_price}", inline=True)
     embed.add_field(name="🛒 Acheter", value=f"[Clique ici]({url})", inline=False)
-    embed.set_image(url=image_url)
+
+    # Pas d’image
     embed.set_footer(text="ZIKO SHOP • Mise à jour en temps réel")
     return embed
 
@@ -273,7 +263,7 @@ async def stock(interaction: discord.Interaction):
     embed = discord.Embed(
         title="📦 Stocks actuels - ZIKO SHOP",
         description="Voici le récapitulatif des produits avec leur stock et prix",
-        color=discord.Color.blue()
+        color=discord.Color.blue()  # Couleur fixée en bleu
     )
 
     for p in products:
