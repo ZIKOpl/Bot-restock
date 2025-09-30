@@ -39,7 +39,7 @@ if os.path.exists(MESSAGE_MAP_FILE):
 
 # === CONFIG FEEDBACK ===
 FEEDBACK_URL = "https://zikoshop.mysellauth.com/feedback"
-FEEDBACK_WEBHOOK = os.environ.get("FEEDBACK_WEBHOOK")  # webhook Discord pour feedback
+FEEDBACK_WEBHOOK = os.environ.get("https://discord.com/api/webhooks/1422631471910490185/AL2qe59arzRW347nSj6NGsVIPlUmR7sVmwNzzXLUIPRbrlsidnJ-dPd8CpzbvHViLVKk")  # webhook Discord pour feedback
 CHECK_FEEDBACK_INTERVAL = 60
 last_feedback_ids = set()
 
