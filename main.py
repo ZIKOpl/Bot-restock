@@ -13,6 +13,7 @@ SHOP_ID = os.environ.get("SHOP_ID", "181618")
 AUTH_TOKEN = os.environ.get("AUTH_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
+FEEDBACK_WEBHOOK_URL = os.environ.get("FEEDBACK_WEBHOOK_URL")  # webhook pour feedback
 CHECK_INTERVAL = 5  # secondes
 MESSAGE_MAP_FILE = "message-map.json"
 DEFAULT_IMAGE_URL = "https://imagedelivery.net/HL_Fwm__tlvUGLZF2p74xw/ce50fff9-ba1b-4e48-514b-4734633d6f00/public"
@@ -32,22 +33,16 @@ last_stock = {}
 message_map = {}
 vitrine_active = True
 
-# Load message map from file
+# Load message map
 if os.path.exists(MESSAGE_MAP_FILE):
     with open(MESSAGE_MAP_FILE, "r") as f:
         message_map = json.load(f)
 
-# === CONFIG FEEDBACK ===
-FEEDBACK_URL = "https://zikoshop.mysellauth.com/feedback"
-FEEDBACK_WEBHOOK = os.environ.get("https://discord.com/api/webhooks/1422631471910490185/AL2qe59arzRW347nSj6NGsVIPlUmR7sVmwNzzXLUIPRbrlsidnJ-dPd8CpzbvHViLVKk")  # webhook Discord pour feedback
-CHECK_FEEDBACK_INTERVAL = 60
-last_feedback_ids = set()
-
-# === FUNCTIONS ===
 def save_message_map():
     with open(MESSAGE_MAP_FILE, "w") as f:
         json.dump(message_map, f)
 
+# === PRODUCT HELPERS ===
 def get_product_image_url(product_url):
     try:
         r = requests.get(product_url)
@@ -56,7 +51,7 @@ def get_product_image_url(product_url):
         start_index = html.find('<meta property="og:image" content="') + len('<meta property="og:image" content="')
         end_index = html.find('"', start_index)
         return html[start_index:end_index]
-    except requests.RequestException:
+    except:
         return DEFAULT_IMAGE_URL
 
 def get_products():
@@ -71,7 +66,7 @@ def get_products():
 def format_price(price):
     try:
         return f"{float(price):.2f} €"
-    except (ValueError, TypeError):
+    except:
         return str(price)
 
 def get_product_price_range(product):
@@ -84,7 +79,7 @@ def get_product_price_range(product):
         return "N/A", "N/A"
     return f"{min(prices):.2f} €", f"{max(prices):.2f} €"
 
-# --- RESTOCK WEBHOOK ---
+# === RESTOCK WEBHOOK ===
 def send_embed(event_type, product_name, product_url, stock, price=None, diff=0):
     if event_type == "restock":
         title = f"🚀 Restock ! {product_name}"
@@ -95,7 +90,7 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
         description = f"➕ {diff} unités ajoutées\n📦 Nouveau stock : **{stock}**"
         color = 0x3498db
     elif event_type == "oos":
-        title = f"❌ Rupture de stock | {product_name}"
+        title = f"❌ Rupture de stock | {product_name}"""
         description = f"Le produit **{product_name}** est maintenant en rupture ! 🛑"
         color = 0xff0000
     else:
@@ -118,42 +113,64 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
     }
 
     payload = {"content": "@everyone", "embeds": [embed]}
-
     try:
         r = requests.post(WEBHOOK_URL, json=payload)
-        if r.status_code in [200, 204]:
-            print(f"✅ {event_type} envoyé: {product_name}")
-        else:
+        if r.status_code not in [200, 204]:
             print(f"❌ Erreur Webhook: {r.status_code} - {r.text}")
     except Exception as e:
         print("❌ Erreur Webhook:", e)
 
-def bot_loop():
-    global last_stock
-    print("🤖 Bot de restock démarré...")
+# === FEEDBACK SYSTEM ===
+def fetch_feedback():
+    try:
+        r = requests.get("https://zikoshop.mysellauth.com/feedback")
+        if r.status_code == 200:
+            return r.json()
+        else:
+            print("❌ Erreur Feedback:", r.status_code)
+            return []
+    except Exception as e:
+        print("❌ Erreur requête Feedback:", e)
+        return []
+
+last_feedback_ids = set()
+
+def feedback_loop():
+    global last_feedback_ids
+    print("💬 Feedback loop démarré...")
     while True:
-        products = get_products()
-        for p in products:
-            pid = str(p.get("id"))
-            stock = p.get("stock_count") or 0
-            name = p.get("name", "Produit inconnu")
-            url = p.get("url") or f"https://zikoshop.sellauth.com/product/{p.get('path', pid)}"
-            price = p.get("price") or get_product_price_range(p)[0]
+        feedbacks = fetch_feedback()
+        for fb in feedbacks:
+            fid = fb.get("id")
+            if not fid or fid in last_feedback_ids:
+                continue
 
-            old_stock = last_stock.get(pid, 0)
+            rating = "⭐" * int(fb.get("rating", 0))
+            text = fb.get("text", "Aucun avis")
+            product = fb.get("product", {}).get("name", "Produit inconnu")
 
-            if old_stock == 0 and stock > 0:
-                send_embed("restock", name, url, stock, price)
-            elif old_stock > 0 and stock > old_stock:
-                send_embed("add", name, url, stock, price, stock - old_stock)
-            elif old_stock > 0 and stock == 0:
-                send_embed("oos", name, url, stock, price)
+            embed = {
+                "title": "📝 Nouveau Feedback",
+                "description": f"**{rating}**\n{text}",
+                "color": 0xFFD700,
+                "fields": [
+                    {"name": "🎁 Produit", "value": product, "inline": False}
+                ],
+                "footer": {"text": "ZIKO SHOP • Feedback client"}
+            }
 
-            last_stock[pid] = stock
+            payload = {"embeds": [embed]}
+            try:
+                requests.post(FEEDBACK_WEBHOOK_URL, json=payload)
+                print(f"✅ Feedback envoyé: {fid}")
+            except Exception as e:
+                print("❌ Erreur envoi feedback:", e)
 
-        time.sleep(CHECK_INTERVAL)
+            last_feedback_ids.add(fid)
 
-# --- DISCORD BOT ---
+        time.sleep(30)  # check toutes les 30s
+
+# === DISCORD BOT ===
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents)
@@ -193,7 +210,6 @@ async def update_vitrine():
                 pid = str(p["id"])
                 name = p.get("name", "").lower()
 
-                # Routing précis
                 if "nitro" in name:
                     channel = channels["Nitro"]
                 elif "reaction" in name:
@@ -211,7 +227,6 @@ async def update_vitrine():
 
                 embed = build_pro_embed(p)
 
-                # Send or edit
                 if pid in message_map:
                     try:
                         msg = await channel.fetch_message(message_map[pid])
@@ -228,7 +243,7 @@ async def update_vitrine():
 
         await asyncio.sleep(10)
 
-# --- COMMANDS ---
+# === COMMANDS ===
 @bot.command()
 async def stopstock(ctx):
     global vitrine_active
@@ -247,14 +262,10 @@ async def resetvitrine(ctx):
     message_map = {}
     if os.path.exists(MESSAGE_MAP_FILE):
         os.remove(MESSAGE_MAP_FILE)
-    await ctx.send("🔄 Vitrine réinitialisée. Tous les embeds seront recréés au prochain cycle.")
+    await ctx.send("🔄 Vitrine réinitialisée. Tous les embeds seront recréés.")
 
-# --- SLASH COMMAND /stock ---
-from discord import app_commands
-
-tree = app_commands.CommandTree(bot)
-
-@tree.command(name="stock", description="Affiche le stock et les prix de tous les produits")
+# === SLASH COMMAND ===
+@bot.tree.command(name="stock", description="Affiche le stock et les prix de tous les produits")
 async def stock(interaction: discord.Interaction):
     products = get_products()
     if not products:
@@ -279,56 +290,8 @@ async def stock(interaction: discord.Interaction):
         )
 
     await interaction.response.send_message(embed=embed, ephemeral=False)
-# === FEEDBACKS ===
-def get_feedbacks():
-    try:
-        r = requests.get(FEEDBACK_URL, timeout=10)
-        if r.status_code == 200:
-            return r.json()
-    except Exception as e:
-        print("❌ Erreur récupération feedbacks:", e)
-    return []
 
-def build_feedback_embed(feedback):
-    rating = int(feedback.get("rating", 0))
-    stars = "⭐" * rating
-    text = feedback.get("text", "Aucun avis fourni")
-    product = feedback.get("product", {}).get("name", "Produit inconnu")
-    author = feedback.get("author", "Anonyme")
-
-    embed = {
-        "title": "📝 Nouveau Feedback",
-        "description": f"**{author}** a laissé un avis sur le shop.",
-        "color": 0x2ecc71,
-        "fields": [
-            {"name": "⭐ Note", "value": stars, "inline": True},
-            {"name": "💬 Avis", "value": text, "inline": False},
-            {"name": "📦 Produit", "value": product, "inline": False}
-        ],
-        "footer": {"text": "ZIKO SHOP • Feedback Client"}
-    }
-    return embed
-
-def feedback_loop():
-    global last_feedback_ids
-    print("💬 Système de feedback démarré...")
-    while True:
-        feedbacks = get_feedbacks()
-        for fb in feedbacks:
-            fid = fb.get("id")
-            if fid and fid not in last_feedback_ids:
-                embed = build_feedback_embed(fb)
-                payload = {"embeds": [embed]}
-                try:
-                    r = requests.post(FEEDBACK_WEBHOOK, json=payload)
-                    if r.status_code in [200, 204]:
-                        print(f"✅ Feedback envoyé: {fid}")
-                        last_feedback_ids.add(fid)
-                except Exception as e:
-                    print("❌ Erreur envoi Feedback:", e)
-        time.sleep(CHECK_FEEDBACK_INTERVAL)
-        
-# --- FLASK POUR PING ---
+# === FLASK ===
 app = Flask(__name__)
 
 @app.route("/")
@@ -342,16 +305,16 @@ def start_flask():
 if __name__ == "__main__":
     threading.Thread(target=start_flask).start()
     threading.Thread(target=bot_loop).start()
-    
+    threading.Thread(target=feedback_loop).start()
+
     async def main():
         async with bot:
             asyncio.create_task(update_vitrine())
             await bot.start(DISCORD_TOKEN)
-    
-    # Synchronisation des slash commands
+
     @bot.event
     async def on_ready():
-        await tree.sync()
+        await bot.tree.sync()
         print(f"✅ Bot connecté en tant que {bot.user} et slash commands synchronisées")
 
     asyncio.run(main())
