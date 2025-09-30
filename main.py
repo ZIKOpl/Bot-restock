@@ -304,7 +304,6 @@ def start_flask():
 # === MAIN ===
 if __name__ == "__main__":
     threading.Thread(target=start_flask).start()
-    threading.Thread(target=bot_loop).start()
     threading.Thread(target=feedback_loop).start()
 
     async def main():
