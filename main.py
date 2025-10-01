@@ -112,7 +112,7 @@ def send_embed(event_type, product_name, product_url, stock, price=None, diff=0)
 # === FEEDBACK SYSTEM ===
 def fetch_feedback():
     try:
-        r = requests.get("https://fastshopfrr.mysellauth.com/feedback")
+        r = requests.get("https://fastshopfrr.sellauth.com/feedback")
         if r.status_code == 200:
             return r.json()
         else:
