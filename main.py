@@ -41,13 +41,26 @@ def save_message_map():
     with open(MESSAGE_MAP_FILE, "w") as f:
         json.dump(message_map, f)
 
+# === GET PRODUCTS ===
 def get_products():
-    headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
-    r = requests.get(f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products", headers=headers)
-    if r.status_code == 200:
-        return r.json().get("data", [])
-    else:
-        print("❌ Erreur API:", r.status_code, r.text)
+    headers = {
+        "Authorization": AUTH_TOKEN,  # ⚠️ Sellauth API Key, pas Bearer
+        "Accept": "application/json"
+    }
+    url = f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products"
+    try:
+        r = requests.get(url, headers=headers)
+        if r.status_code == 200:
+            try:
+                return r.json().get("data", [])
+            except Exception as e:
+                print("❌ Erreur parsing JSON:", e, "\nRéponse:", r.text[:200])
+                return []
+        else:
+            print("❌ Erreur API:", r.status_code, r.text[:200])
+            return []
+    except Exception as e:
+        print("❌ Erreur requête API:", e)
         return []
 
 def format_price(price):
@@ -124,7 +137,7 @@ def fetch_feedback():
 
 last_feedback_ids = set()
 
-def feedback_loop():
+async def feedback_loop():
     global last_feedback_ids
     print("💬 Feedback loop démarré...")
     while True:
@@ -157,7 +170,7 @@ def feedback_loop():
 
             last_feedback_ids.add(fid)
 
-        time.sleep(30)
+        await asyncio.sleep(30)
 
 # === DISCORD BOT ===
 intents = discord.Intents.default()
@@ -211,9 +224,8 @@ async def update_vitrine():
                 pid = str(p["id"])
                 stock = p.get("stock_count", 0)
                 name = p.get("name", "Produit inconnu")
-                url = p.get("url") or f"https://fastshopfrr.sellauth.com/product/{p.get('path', pid)}"
+                url = p.get("url") or f"https://fastshopfrr.mysellauth.com/product/{p.get('path', pid)}"
 
-                # === Détection des changements de stock ===
                 old_stock = last_stock.get(pid, stock)
                 if stock != old_stock:
                     if stock == 0 and old_stock > 0:
@@ -224,7 +236,6 @@ async def update_vitrine():
                         send_embed("add", name, url, stock, diff=stock-old_stock)
                 last_stock[pid] = stock
 
-                # === Choix du salon ===
                 pname = name.lower()
                 if "nitro" in pname:
                     channel = channels["Nitro"]
@@ -241,7 +252,6 @@ async def update_vitrine():
                 else:
                     channel = channels["Boost"]
 
-                # === Mise à jour de la vitrine ===
                 embed = build_pro_embed(p)
                 if pid in message_map:
                     try:
@@ -320,17 +330,17 @@ def start_flask():
 # === MAIN ===
 if __name__ == "__main__":
     threading.Thread(target=start_flask).start()
-    threading.Thread(target=feedback_loop).start()
+    threading.Thread(target=lambda: asyncio.run(feedback_loop())).start()
 
     async def main():
         async with bot:
-            asyncio.create_task(clear_channels())  # nettoyage au démarrage
+            asyncio.create_task(clear_channels())
             asyncio.create_task(update_vitrine())
             await bot.start(DISCORD_TOKEN)
 
     @bot.event
     async def on_ready():
         await bot.tree.sync()
-        print(f"✅ Bot connecté en tant que {bot.user} et slash commands synchronisées")
+        print(f"✅ Bot connecté : {bot.user} et slash commands synchronisées")
 
     asyncio.run(main())
