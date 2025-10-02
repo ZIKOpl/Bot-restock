@@ -43,7 +43,7 @@ def save_message_map():
 
 def get_products():
     headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
-    r = requests.get(f"https://api.mysellauth.com/v1/shops/{SHOP_ID}/products", headers=headers)
+    r = requests.get(f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products", headers=headers)
     if r.status_code == 200:
         return r.json().get("data", [])
     else:
