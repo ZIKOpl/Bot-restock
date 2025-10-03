@@ -3,25 +3,22 @@ import os
 import json
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Optional, List
 
 import aiohttp
 import discord
 from discord.ext import commands
-from discord import app_commands
 
 # ---------------------------
 # CONFIG / LOGGING
 # ---------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger("fastshop")
+log = logging.getLogger("zikoshop")
 
 SHOP_ID = os.environ.get("SHOP_ID", "181618")
-SELLAUTH_TOKEN = os.environ.get("SELLAUTH_TOKEN")  # 5261810|UsgFVd3bDb3hSY8zBqa7Fy53bfaZXXFXLSr6Dx1x1e6f5580
+SELLAUTH_TOKEN = os.environ.get("SELLAUTH_TOKEN")
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # webhook alerts restock/oos
-FEEDBACK_CHANNEL = 1417943146653810859  # lecture feedback
-
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", 10))
 MESSAGE_MAP_FILE = "message-map.json"
 
@@ -40,7 +37,6 @@ CHANNELS = {
 last_stock: Dict[str, int] = {}
 message_map: Dict[str, int] = {}
 vitrine_active = True
-last_feedback_ids = set()
 
 if os.path.exists(MESSAGE_MAP_FILE):
     try:
@@ -82,6 +78,7 @@ async def send_alert_webhook(event_type: str, product_name: str, product_url: st
     elif event_type == "add":
         title = f"📈 Stock augmenté | {product_name}"
         description = f"➕ {diff} unités ajoutées\n📦 Nouveau stock : **{stock}**"
+        color = 0x3498db
     elif event_type == "oos":
         title = f"❌ Rupture de stock | {product_name}"
         description = f"Le produit **{product_name}** est maintenant en rupture ! 🛑"
@@ -125,23 +122,6 @@ async def fetch_products() -> List[dict]:
                 return []
     except Exception as e:
         log.exception("Erreur fetch_products: %s", e)
-        return []
-
-async def fetch_feedbacks() -> List[dict]:
-    global aio_sess
-    if aio_sess is None:
-        aio_sess = aiohttp.ClientSession()
-    url = f"https://api.sellauth.com/v1/shops/{SHOP_ID}/feedbacks"
-    headers = {"Authorization": f"Bearer {SELLAUTH_TOKEN}"}
-    try:
-        async with aio_sess.get(url, headers=headers) as r:
-            if r.status == 200:
-                return await r.json()
-            else:
-                log.warning("fetch_feedbacks status %s", r.status)
-                return []
-    except Exception as e:
-        log.exception("Erreur fetch_feedbacks: %s", e)
         return []
 
 # ---------------------------
@@ -241,35 +221,6 @@ async def update_vitrine_loop():
         await asyncio.sleep(CHECK_INTERVAL)
 
 # ---------------------------
-# FEEDBACK LOOP
-# ---------------------------
-async def feedback_loop():
-    await bot.wait_until_ready()
-    log.info("Feedback loop démarré")
-    global last_feedback_ids
-    while not bot.is_closed():
-        try:
-            feedbacks = await fetch_feedbacks()
-            for fb in feedbacks:
-                fid = fb.get("id")
-                if fid in last_feedback_ids:
-                    continue
-                embed = discord.Embed(
-                    title="📝 Nouveau Feedback",
-                    description=fb.get("text", "Aucun avis"),
-                    color=0xFFD700
-                )
-                embed.add_field(name="⭐ Note", value=str(fb.get("rating", 0)), inline=True)
-                embed.add_field(name="🎁 Produit", value=fb.get("product", {}).get("name", "Produit inconnu"), inline=False)
-                channel = bot.get_channel(FEEDBACK_CHANNEL)
-                if channel:
-                    await channel.send(embed=embed)
-                last_feedback_ids.add(fid)
-        except Exception as e:
-            log.exception("Erreur feedback_loop: %s", e)
-        await asyncio.sleep(30)
-
-# ---------------------------
 # COMMANDS
 # ---------------------------
 @bot.command()
@@ -302,7 +253,6 @@ async def on_ready():
     if aio_sess is None:
         aio_sess = aiohttp.ClientSession()
     bot.loop.create_task(update_vitrine_loop())
-    bot.loop.create_task(feedback_loop())
     try:
         await bot.tree.sync()
         log.info("Slash commands synced.")
