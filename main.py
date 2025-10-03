@@ -3,7 +3,7 @@ import os
 import json
 import asyncio
 import logging
-from typing import Dict, Optional, List
+from typing import Dict, Any, List, Optional
 
 import aiohttp
 import discord
@@ -18,7 +18,8 @@ log = logging.getLogger("zikoshop")
 SHOP_ID = os.environ.get("SHOP_ID", "181618")
 SELLAUTH_TOKEN = os.environ.get("SELLAUTH_TOKEN")
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # webhook alerts restock/oos
+
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", 10))
 MESSAGE_MAP_FILE = "message-map.json"
 
@@ -78,7 +79,6 @@ async def send_alert_webhook(event_type: str, product_name: str, product_url: st
     elif event_type == "add":
         title = f"📈 Stock augmenté | {product_name}"
         description = f"➕ {diff} unités ajoutées\n📦 Nouveau stock : **{stock}**"
-        color = 0x3498db
     elif event_type == "oos":
         title = f"❌ Rupture de stock | {product_name}"
         description = f"Le produit **{product_name}** est maintenant en rupture ! 🛑"
@@ -111,6 +111,7 @@ async def fetch_products() -> List[dict]:
     global aio_sess
     if aio_sess is None:
         aio_sess = aiohttp.ClientSession()
+    log.info("DEBUG: SHOP_ID=%s, Token=%s", SHOP_ID, SELLAUTH_TOKEN[:10] + "...")  # log partiel du token
     url = f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products"
     headers = {"Authorization": f"Bearer {SELLAUTH_TOKEN}"}
     try:
@@ -188,7 +189,6 @@ async def update_vitrine_loop():
                         asyncio.create_task(send_alert_webhook("add", name, url, stock, diff=stock-old_stock))
                 last_stock[pid] = stock
 
-                # Choix salon
                 pname = name.lower()
                 channel = channel_objs.get(
                     "Nitro" if "nitro" in pname else
