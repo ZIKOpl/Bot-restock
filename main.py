@@ -3,11 +3,14 @@ import os
 import json
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Optional
 
 import aiohttp
 import discord
 from discord.ext import commands
+from discord import app_commands
+from flask import Flask
+import threading
 
 # ---------------------------
 # CONFIG / LOGGING
@@ -18,7 +21,7 @@ log = logging.getLogger("zikoshop")
 SHOP_ID = os.environ.get("SHOP_ID", "181618")
 SELLAUTH_TOKEN = os.environ.get("SELLAUTH_TOKEN")
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # webhook alerts restock/oos
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", 10))
 MESSAGE_MAP_FILE = "message-map.json"
@@ -107,11 +110,10 @@ async def send_alert_webhook(event_type: str, product_name: str, product_url: st
     except Exception as e:
         log.exception("Erreur envoi webhook: %s", e)
 
-async def fetch_products() -> List[dict]:
+async def fetch_products():
     global aio_sess
     if aio_sess is None:
         aio_sess = aiohttp.ClientSession()
-    log.info("DEBUG: SHOP_ID=%s, Token=%s", SHOP_ID, SELLAUTH_TOKEN[:10] + "...")  # log partiel du token
     url = f"https://api.sellauth.com/v1/shops/{SHOP_ID}/products"
     headers = {"Authorization": f"Bearer {SELLAUTH_TOKEN}"}
     try:
@@ -133,12 +135,15 @@ def build_product_embed(p: dict) -> discord.Embed:
     name = p.get("name") or "Produit"
     stock = int(p.get("stock_count", p.get("stock", 0) or 0))
     price = p.get("price") or "N/A"
-    url = p.get("url") or f"https://fastshopfrr.sellauth.com/product/{pid}"
+    url = p.get("url") or f"https://fastshopfrr.mysellauth.com/product/{pid}"
     color = 0x2ecc71 if stock > 0 else 0xe74c3c
-    embed = discord.Embed(title=name, color=color)
-    embed.add_field(name="📦 Stock", value=str(stock), inline=True)
-    embed.add_field(name="💰 Prix", value=f"{price} €", inline=True)
-    embed.add_field(name="🔗 Lien", value=f"[Voir / Acheter]({url})", inline=False)
+    embed = discord.Embed(
+        title=name,
+        description=f"💰 Prix : **{price} €**\n📦 Stock : **{stock}**",
+        color=color
+    )
+    embed.add_field(name="🔗 Lien d'achat", value=f"[Voir / Acheter]({url})", inline=False)
+    embed.set_footer(text="ZIKO SHOP")
     return embed
 
 class BuyView(discord.ui.View):
@@ -163,19 +168,13 @@ async def update_vitrine_loop():
                 await asyncio.sleep(CHECK_INTERVAL)
                 continue
 
-            channel_objs = {}
-            for k, cid in CHANNELS.items():
-                try:
-                    ch = bot.get_channel(cid) or await bot.fetch_channel(cid)
-                    channel_objs[k] = ch
-                except:
-                    channel_objs[k] = None
+            channel_objs = {k: bot.get_channel(cid) or await bot.fetch_channel(cid) for k, cid in CHANNELS.items()}
 
             for p in products:
                 pid = str(p.get("id") or p.get("product_id") or "unknown")
                 stock = int(p.get("stock_count", p.get("stock", 0) or 0))
                 name = p.get("name") or "Produit"
-                url = p.get("url") or f"https://fastshopfrr.sellauth.com/product/{pid}"
+                url = p.get("url") or f"https://fastshopfrr.mysellauth.com/product/{pid}"
                 old_stock = last_stock.get(pid)
 
                 if old_stock is None and stock > 0:
@@ -265,6 +264,24 @@ async def _shutdown():
         await aio_sess.close()
     await bot.close()
 
+# ---------------------------
+# FLASK SERVER POUR RENDER
+# ---------------------------
+app = Flask("")
+
+@app.route("/")
+def home():
+    return "Bot en ligne !"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_flask).start()
+
+# ---------------------------
+# RUN BOT
+# ---------------------------
 if __name__ == "__main__":
     try:
         bot.run(DISCORD_TOKEN)
