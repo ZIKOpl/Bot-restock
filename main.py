@@ -133,7 +133,7 @@ def build_product_embed(p: dict) -> discord.Embed:
     name = p.get("name") or "Produit"
     stock = int(p.get("stock_count", p.get("stock", 0) or 0))
     price = p.get("price") or "N/A"
-    url = p.get("url") or f"https://fastshopfrr.mysellauth.com/product/{pid}"
+    url = p.get("url") or f"https://fastshopfrr.sellauth.com/product/{pid}"
     color = 0x2ecc71 if stock > 0 else 0xe74c3c
     embed = discord.Embed(title=name, color=color)
     embed.add_field(name="📦 Stock", value=str(stock), inline=True)
@@ -175,7 +175,7 @@ async def update_vitrine_loop():
                 pid = str(p.get("id") or p.get("product_id") or "unknown")
                 stock = int(p.get("stock_count", p.get("stock", 0) or 0))
                 name = p.get("name") or "Produit"
-                url = p.get("url") or f"https://fastshopfrr.mysellauth.com/product/{pid}"
+                url = p.get("url") or f"https://fastshopfrr.sellauth.com/product/{pid}"
                 old_stock = last_stock.get(pid)
 
                 if old_stock is None and stock > 0:
