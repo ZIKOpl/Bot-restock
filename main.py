@@ -3,14 +3,13 @@ import os
 import json
 import asyncio
 import logging
-from typing import Dict, Optional
+from typing import Dict, Any, List, Optional
 
 import aiohttp
 import discord
 from discord.ext import commands
 from discord import app_commands
 from flask import Flask
-import threading
 
 # ---------------------------
 # CONFIG / LOGGING
@@ -22,7 +21,6 @@ SHOP_ID = os.environ.get("SHOP_ID", "181618")
 SELLAUTH_TOKEN = os.environ.get("SELLAUTH_TOKEN")
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", 10))
 MESSAGE_MAP_FILE = "message-map.json"
 
@@ -110,7 +108,7 @@ async def send_alert_webhook(event_type: str, product_name: str, product_url: st
     except Exception as e:
         log.exception("Erreur envoi webhook: %s", e)
 
-async def fetch_products():
+async def fetch_products() -> List[dict]:
     global aio_sess
     if aio_sess is None:
         aio_sess = aiohttp.ClientSession()
@@ -134,22 +132,22 @@ def build_product_embed(p: dict) -> discord.Embed:
     pid = str(p.get("id") or p.get("product_id") or "Produit")
     name = p.get("name") or "Produit"
     stock = int(p.get("stock_count", p.get("stock", 0) or 0))
-    price = p.get("price") or "N/A"
+    price = p.get("price", "N/A")
     url = p.get("url") or f"https://fastshopfrr.mysellauth.com/product/{pid}"
     color = 0x2ecc71 if stock > 0 else 0xe74c3c
     embed = discord.Embed(
-        title=name,
-        description=f"💰 Prix : **{price} €**\n📦 Stock : **{stock}**",
-        color=color
+        title=name, 
+        url=url,
+        color=color,
+        description=f"💰 Prix : **{price} €**\n📦 Stock : **{stock}**"
     )
-    embed.add_field(name="🔗 Lien d'achat", value=f"[Voir / Acheter]({url})", inline=False)
     embed.set_footer(text="ZIKO SHOP")
     return embed
 
 class BuyView(discord.ui.View):
     def __init__(self, url: str):
         super().__init__(timeout=None)
-        self.add_item(discord.ui.Button(label="Acheter", url=url))
+        self.add_item(discord.ui.Button(label="Acheter", style=discord.ButtonStyle.green, url=url))
 
 # ---------------------------
 # VITRINE LOOP
@@ -168,7 +166,13 @@ async def update_vitrine_loop():
                 await asyncio.sleep(CHECK_INTERVAL)
                 continue
 
-            channel_objs = {k: bot.get_channel(cid) or await bot.fetch_channel(cid) for k, cid in CHANNELS.items()}
+            channel_objs = {}
+            for k, cid in CHANNELS.items():
+                try:
+                    ch = bot.get_channel(cid) or await bot.fetch_channel(cid)
+                    channel_objs[k] = ch
+                except:
+                    channel_objs[k] = None
 
             for p in products:
                 pid = str(p.get("id") or p.get("product_id") or "unknown")
@@ -188,6 +192,7 @@ async def update_vitrine_loop():
                         asyncio.create_task(send_alert_webhook("add", name, url, stock, diff=stock-old_stock))
                 last_stock[pid] = stock
 
+                # Choix salon
                 pname = name.lower()
                 channel = channel_objs.get(
                     "Nitro" if "nitro" in pname else
@@ -251,6 +256,23 @@ async def on_ready():
     log.info("Bot connecté : %s", bot.user)
     if aio_sess is None:
         aio_sess = aiohttp.ClientSession()
+
+    # --- SUPPRESSION DES MESSAGES DES SALONS VITRINE ---
+    for cid in CHANNELS.values():
+        try:
+            channel = bot.get_channel(cid) or await bot.fetch_channel(cid)
+            if channel:
+                async for msg in channel.history(limit=None):
+                    try:
+                        await msg.delete()
+                    except Exception as e:
+                        log.warning("Impossible de supprimer un message dans %s: %s", channel.id, e)
+        except Exception as e:
+            log.warning("Erreur récupération du salon %s: %s", cid, e)
+    message_map.clear()
+    save_message_map()
+    log.info("Tous les messages des salons vitrine ont été supprimés.")
+
     bot.loop.create_task(update_vitrine_loop())
     try:
         await bot.tree.sync()
@@ -265,24 +287,23 @@ async def _shutdown():
     await bot.close()
 
 # ---------------------------
-# FLASK SERVER POUR RENDER
+# FLASK POUR KEEP-ALIVE
 # ---------------------------
 app = Flask("")
 
 @app.route("/")
 def home():
-    return "Bot en ligne !"
+    return "Bot is running"
 
 def run_flask():
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-
-threading.Thread(target=run_flask).start()
+    import threading
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))).start()
 
 # ---------------------------
-# RUN BOT
+# MAIN
 # ---------------------------
 if __name__ == "__main__":
+    run_flask()
     try:
         bot.run(DISCORD_TOKEN)
     except KeyboardInterrupt:
